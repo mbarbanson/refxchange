@@ -1,0 +1,14 @@
+{
+    "applications": {
+        "_default": {
+            "link": "refXchange"
+        }, 
+        "refXchange": {
+            "applicationId": "tqmF4S12XejvD5fY75fAv3QDd4KSNaDJ0FvdJsRz", 
+            "masterKey": "7h3DZ0NwxPpRy8jS7fhsCl3aINdaoDsZPpnI5NhF"
+        }
+    }, 
+    "global": {
+        "parseVersion": "1.2.17"
+    }
+}
