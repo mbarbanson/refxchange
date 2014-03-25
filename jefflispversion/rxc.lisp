@@ -1,5 +1,12 @@
 ; (load "rxc.lisp")
 
+;;; This will automatically write a letter by calling (write-letter!)
+;;; at the end. You need to either comment that out, or something, to
+;;; stop it. 
+
+;;; If you want to reset the vars just (setq *default-bindings* nil)
+;;; before (write-letter!), and it will re-ask.
+
 (defparameter *start-letter-token* :ref-letter)
 
 (defparameter *grammar* nil) ;; set later bcs of fwd refs for fns.
