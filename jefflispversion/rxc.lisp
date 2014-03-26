@@ -23,7 +23,30 @@
     (:neg-phrase "Say something slightly negative about this student (e.g., 'was often late to class')")
     ))
 
+(defstruct student :id :full-name :brief-name :gpa :ecas)
 
+(defvar *student-recs* nil)
+
+(defun load-student-recs ()
+  (setq *student-recs*
+	(with-open-file
+	 (i "studnet-db.lisp")
+	 (loop for rec = (read i nil nil)
+	       until (null rec)
+	       collect (make-student :id (getf rec :id)
+				     :full-name (getf rec :full-name)
+				     :brief-name (getf rec :brief-name)
+				     :gpa (getf rec :gpa)
+				     :ecas(getf rec :ecas)
+				     )))))
+
+(defun find-student (id-or-name)
+  (unless *student-recs* (load-student-recs))
+  (loop for rec in *student-recs*
+	when (or (and (numberp id) (= id-or-name (student-id rec)))
+		 (and (stringp id) (string-equal id-or-name (student-full-name rec))))
+	do (return rec)))
+	
 (defvar *default-bindings* nil)
 
 (defun get-vars ()
