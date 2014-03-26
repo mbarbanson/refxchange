@@ -26,7 +26,7 @@
     (:program "What is the name of the program to which the student is applying? ")
     (:gender "Gender (m/f): " ,#'student-gender)
     (:course-attended-title "The name of the course that the student took from you? " ,#'my-course)
-    (:grade-in-my-course "The grade that this student received in your course (e.g., A-): " ,#'course-grade)
+    (:course-grade "The grade that this student received in your course (e.g., A-): " ,#'course-grade)
     (:student-in-top-% "What percentile was this student (for example, a student in the top 5% you would say: '5')? ")
     (:nice-phrase "Say something positive about this student (e.g., 'is a quick study')")
     (:neg-phrase "Say something slightly negative about this student (e.g., 'was often late to course')")
@@ -85,7 +85,7 @@
 (defun short-name-or-pronoun (rec)
   (if (zerop (random 2))
       (if (string-equal "m" (vval :gender *default-bindings*)) "he" "she")
-      (student-short-name bindings)))
+      (student-short-name  *default-bindings*)))
 (defun student-short-name (rec)
   (let* ((fn (vval :student-full-name *default-bindings*)))
     (subseq fn 0 (position #\space fn))))
@@ -131,7 +131,7 @@
     (:time-known-unit ,#'time-known-unit)
     (:time-known-number ,#'time-known-number)
     (:my-course ,#'my-course)
-    (:grade-in-course ,#'course-grade)))
+    (:course-grade ,#'course-grade)))
 
 
 (defparameter *grammar*
@@ -144,22 +144,8 @@
     (:comments :pos :neg)
     (:pos "On the positive side " :short-name-or-pronoun " " :nice-phrase ", ")
     (:neg "on the otherhand " :short-name-or-pronoun " " :neg-phrase ". ")
-    (:course-details "In my course, " :my-course :short-name-or-pronoun " received a " :grade-in-course ". ")
+    (:course-details "In my course, " :my-course " " :short-name-or-pronoun " received a " :course-grade ". ")
     ))
-
-#|
-(setq *default-bindings* 
-  '((:to-person-salutation "Dr. Smith")
-    (:student-full-name "Jane Doe")
-    (:time-known "3 months")
-    (:program "The Stanford MBA program")
-    (:gender "f ")
-    (:course-attended-title "Business As Usual (BS101)")
-    (:student-in-top-% 5)
-    (:nice-phrase "is a quick study")
-    (:neg-phrase "was often late to class")
-    ))
-|#
 
 (format t "=== Writing for a known student, 12345 ===~%")
 (setq *student-recs* nil) (setq *default-bindings* nil)
