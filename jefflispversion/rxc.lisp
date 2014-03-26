@@ -13,7 +13,9 @@
 (defparameter *grammar* nil) ;; set later bcs of fwd refs for fns.
 
 (defun course-grade (rec)
-  (cdr (assoc *my-course* (student-courses rec) :test #'string-equal)))
+  (if rec
+      (cdr (assoc *my-course* (student-courses rec) :test #'string-equal))
+    (vval :course-grade)))
 
 (defun my-course (rec) *my-course*)
 
@@ -51,10 +53,14 @@
 
 (defun find-student (&key id-or-name)
   (unless *student-recs* (load-student-recs))
-  (loop for rec in *student-recs*
+  (let ((rec (loop for rec in *student-recs*
 	when (or (and (numberp id-or-name) (= id-or-name (student-id rec)))
 		 (and (stringp id-or-name) (string-equal id-or-name (student-full-name rec))))
-	do (return rec)))
+	do (return rec))))
+    (if rec 
+	(format t "Found and using record for ~a...~%" id-or-name)
+      (format t "No record was found for ~a. You'll need to fill in the info...~%" id-or-name))
+    rec))
 	
 (defvar *default-bindings* nil)
 
@@ -135,21 +141,22 @@
 
 
 (defparameter *grammar*
-  `((:ref-letter :salutation :intro :known-time :course-details :way-known :comments)
+  `((:ref-letter :salutation :intro :known-time :way-known :course-details :comments)
     (:salutation "Dear " :to-person-salutation ", ")
     (:intro "It is my " :pleasure/honor " to write in support of " :student-full-name "'s application to the " :program ". ")
     (:known-time "I have known " :student-short-name " for " :time-known-number :time-known-unit ". ")
-    (:way-known :short-name-or-pronoun " attended my course entitled \'" :course-attended-title "\'. ")
+    (:way-known :short-name-or-pronoun " attended my course \'" :course-attended-title "\' (aka, "  :my-course "). ")
     (:pleasure/honor (:alt "pleasure" "honor"))
     (:comments :pos :neg)
     (:pos "On the positive side " :short-name-or-pronoun " " :nice-phrase ", ")
     (:neg "on the otherhand " :short-name-or-pronoun " " :neg-phrase ". ")
-    (:course-details "In my course, " :my-course " " :short-name-or-pronoun " received a " :course-grade ". ")
+    (:course-details "In " :my-course " " :short-name-or-pronoun " received a " :course-grade ". ")
     ))
 
-(format t "=== Writing for a known student, 12345 ===~%")
+(format t "~%~%=== Writing for a known student, 12345 ===~%~%")
 (setq *student-recs* nil) (setq *default-bindings* nil)
 (write-letter! :id-or-name 12345 :course "symsys245")
-(format t "=== Writing for a UNknown student! ===~%")
+(format t "~%~%=== Writing for a UNknown student! ===~%~%")
 (setq *student-recs* nil) (setq *default-bindings* nil)
 (write-letter! :id-or-name 00000 :course "symsys245")
+(format t "~%~%=== DONE ===~%~%")
