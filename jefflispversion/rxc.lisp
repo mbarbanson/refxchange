@@ -8,29 +8,36 @@
 ;;; before (write-letter!), and it will re-ask.
 
 (defparameter *start-letter-token* :ref-letter)
+(defvar *my-course* nil)
 
 (defparameter *grammar* nil) ;; set later bcs of fwd refs for fns.
 
-(defparameter *vars* 
-  '((:to-person-salutation "How should the salutation read, for example: 'Dr. Smith'? ")
-    (:student-full-name "What is the student's full name, as 'Jane Doe'? ")
+(defun course-grade (rec)
+  (cdr (assoc *my-course* (student-courses rec) :test #'string-equal)))
+
+(defun my-course (rec) *my-course*)
+
+(defstruct student :id :full-name :brief-name :gpa :ecas :courses :gender)
+
+(defparameter *vars*  ;; The fns in third pos must take only a student record
+  `((:to-person-salutation "How should the salutation read, for example: 'Dr. Smith'? ")
+    (:student-full-name "What is the student's full name, as 'Jane Doe'? " ,#'student-full-name)
     (:time-known "How long have you known this student, for example '3 months'? ")
     (:program "What is the name of the program to which the student is applying? ")
-    (:gender "Gender (m/f): ")
-    (:course-attended-title "The name of the class that the student took from you? ")
+    (:gender "Gender (m/f): " ,#'student-gender)
+    (:course-attended-title "The name of the course that the student took from you? " ,#'my-course)
+    (:grade-in-my-course "The grade that this student received in your course (e.g., A-): " ,#'course-grade)
     (:student-in-top-% "What percentile was this student (for example, a student in the top 5% you would say: '5')? ")
     (:nice-phrase "Say something positive about this student (e.g., 'is a quick study')")
-    (:neg-phrase "Say something slightly negative about this student (e.g., 'was often late to class')")
+    (:neg-phrase "Say something slightly negative about this student (e.g., 'was often late to course')")
     ))
-
-(defstruct student :id :full-name :brief-name :gpa :ecas :classes)
 
 (defvar *student-recs* nil)
 
 (defun load-student-recs ()
   (setq *student-recs*
 	(with-open-file
-	 (i "studnet-db.lisp")
+	 (i "student-db.lisp")
 	 (loop for rec = (read i nil nil)
 	       until (null rec)
 	       collect (make-student :id (getf rec :id)
@@ -38,25 +45,29 @@
 				     :brief-name (getf rec :brief-name)
 				     :gpa (getf rec :gpa)
 				     :ecas (getf rec :ecas)
-				     :classes (getf rec :classes)
+				     :courses (getf rec :courses)
+				     :gender (getf rec :gender)
 				     )))))
 
-(defun find-student (id-or-name)
+(defun find-student (&key id-or-name)
   (unless *student-recs* (load-student-recs))
   (loop for rec in *student-recs*
-	when (or (and (numberp id) (= id-or-name (student-id rec)))
-		 (and (stringp id) (string-equal id-or-name (student-full-name rec))))
+	when (or (and (numberp id-or-name) (= id-or-name (student-id rec)))
+		 (and (stringp id-or-name) (string-equal id-or-name (student-full-name rec))))
 	do (return rec)))
 	
 (defvar *default-bindings* nil)
 
-(defun get-vars (&key id-or-name class)
+(defun get-vars (&key id-or-name course)
   "Pull everything that we can from the student record, and ask for the rest."
   (let ((student (find-student :id-or-name id-or-name)))
     (setq *default-bindings* 
-	  (loop for (var prompt) in *vars*
-		do (princ prompt)
-		collect `(,var ,(read-line))))))
+	  (loop for (var prompt accessor) in *vars*
+		with result = nil
+		collect 
+		`(,var 
+		  ,(or (and accessor student (funcall accessor student))
+		       (progn (princ prompt) (read-line))))))))
 
 (defun vval (var &optional (bindings *default-bindings*))
   (or (cadr (assoc var bindings))
@@ -78,10 +89,10 @@
   (let* ((tf (vval :time-known bindings)))
     (subseq tf 0 (position #\space tf))))
 
-(defun write-letter! (&key id-or-name class)
+(defun write-letter! (&key id-or-name course)
   (terpri) (terpri)
-  (unless *default-bindings*
-    (get-vars :id-or-name id :class class))
+  (setq *my-course* course)
+  (setq *default-bindings* (get-vars :id-or-name id-or-name :course course))
   (recursive-write-part *start-letter-token*))
 
 (defun charp (c)
@@ -107,8 +118,8 @@
 (defun lprint (string)
   (princ string))
 
-(setq *grammar*
-  `((:ref-letter :salutation :intro :known-time :way-known :comments)
+(defparameter *grammar*
+  `((:ref-letter :salutation :intro :known-time :course-details :way-known :comments)
     (:salutation "Dear " :to-person-salutation ", ")
     (:intro "It is my " :pleasure/honor " to write in support of " :student-full-name "'s application to the " :program ". ")
     (:known-time "I have known " :student-short-name " for " :time-known-number :time-known-unit ". ")
@@ -121,6 +132,7 @@
     (:student-short-name ,#'student-short-name)
     (:time-known-unit ,#'time-known-unit)
     (:time-known-number ,#'time-known-number)
+    (:course-details "In my course, " #,my-course ,#'short-name-or-pronoun " received a " ,#'grade-in-course)
     ))
 
 #|
@@ -137,4 +149,8 @@
     ))
 |#
 
-(write-letter! :id-or-name 12345 :class "symsys245")
+(format t "=== Writing for a known student, 12345 ===~%")
+(setq *student-recs* nil)
+(write-letter! :id-or-name 12345 :course "symsys245")
+(format t "=== Writing for a UNknown student! ===~%")
+(write-letter! :id-or-name 00000 :course "symsys245")
