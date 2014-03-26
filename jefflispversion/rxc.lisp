@@ -21,6 +21,11 @@
 
 (defstruct student :id :full-name :brief-name :gpa :ecas :courses :gender)
 
+(defparameter *course-cataglog* 
+  '(("symsys245" . "Interaction Analysis")
+    ("phys105" . "Quantum Physics of Cats")
+    ("CS106B" . "Why there is Air")))
+
 (defparameter *vars*  ;; The fns in third pos must take only a student record
   `((:to-person-salutation "How should the salutation read, for example: 'Dr. Smith'? ")
     (:student-full-name "What is the student's full name, as 'Jane Doe'? " ,#'student-full-name)
@@ -131,13 +136,18 @@
 (defun lprint (string)
   (princ string))
 
+(defun course-full-name (rec)
+  (cdr (assoc *my-course* *course-cataglog* :test #'string-equal)))
+
 (defparameter *computed-var-vals* 
   `((:short-name-or-pronoun ,#'short-name-or-pronoun)
     (:student-short-name ,#'student-short-name)
     (:time-known-unit ,#'time-known-unit)
     (:time-known-number ,#'time-known-number)
     (:my-course ,#'my-course)
-    (:course-grade ,#'course-grade)))
+    (:course-grade ,#'course-grade)
+    (:course-full-name ,#'course-full-name)
+    ))
 
 
 (defparameter *grammar*
@@ -145,7 +155,7 @@
     (:salutation "Dear " :to-person-salutation ", ")
     (:intro "It is my " :pleasure/honor " to write in support of " :student-full-name "'s application to the " :program ". ")
     (:known-time "I have known " :student-short-name " for " :time-known-number :time-known-unit ". ")
-    (:way-known :short-name-or-pronoun " attended my course \'" :course-attended-title "\' (aka, "  :my-course "). ")
+    (:way-known :short-name-or-pronoun " attended my course \'" :course-full-name "\' (aka, "  :my-course "). ")
     (:pleasure/honor (:alt "pleasure" "honor"))
     (:comments :pos :neg)
     (:pos "On the positive side " :short-name-or-pronoun " " :nice-phrase ", ")
