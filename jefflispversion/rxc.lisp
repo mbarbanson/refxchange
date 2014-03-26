@@ -12,18 +12,18 @@
 (defparameter *grammar* nil) ;; set later bcs of fwd refs for fns.
 
 (defparameter *vars* 
-  '((:to-person-salutation "** How should the salutation read, for example: 'Dr. Smith'? ")
-    (:student-full-name "** What is the student's full name, as 'Jane Doe'? ")
+  '((:to-person-salutation "How should the salutation read, for example: 'Dr. Smith'? ")
+    (:student-full-name "What is the student's full name, as 'Jane Doe'? ")
     (:time-known "How long have you known this student, for example '3 months'? ")
-    (:program "** What is the name of the program to which the student is applying? ")
-    (:gender "** Gender (m/f): ")
-    (:course-attended-title "** The name of the class that the student took from you? ")
+    (:program "What is the name of the program to which the student is applying? ")
+    (:gender "Gender (m/f): ")
+    (:course-attended-title "The name of the class that the student took from you? ")
     (:student-in-top-% "What percentile was this student (for example, a student in the top 5% you would say: '5')? ")
     (:nice-phrase "Say something positive about this student (e.g., 'is a quick study')")
     (:neg-phrase "Say something slightly negative about this student (e.g., 'was often late to class')")
     ))
 
-(defstruct student :id :full-name :brief-name :gpa :ecas)
+(defstruct student :id :full-name :brief-name :gpa :ecas :classes)
 
 (defvar *student-recs* nil)
 
@@ -37,7 +37,8 @@
 				     :full-name (getf rec :full-name)
 				     :brief-name (getf rec :brief-name)
 				     :gpa (getf rec :gpa)
-				     :ecas(getf rec :ecas)
+				     :ecas (getf rec :ecas)
+				     :classes (getf rec :classes)
 				     )))))
 
 (defun find-student (id-or-name)
@@ -49,11 +50,13 @@
 	
 (defvar *default-bindings* nil)
 
-(defun get-vars ()
-  (setq *default-bindings* 
-	(loop for (var prompt) in *vars*
-	      do (print prompt)
-	      collect `(,var ,(read-line)))))
+(defun get-vars (&key id-or-name class)
+  "Pull everything that we can from the student record, and ask for the rest."
+  (let ((student (find-student :id-or-name id-or-name)))
+    (setq *default-bindings* 
+	  (loop for (var prompt) in *vars*
+		do (princ prompt)
+		collect `(,var ,(read-line))))))
 
 (defun vval (var &optional (bindings *default-bindings*))
   (or (cadr (assoc var bindings))
@@ -75,9 +78,10 @@
   (let* ((tf (vval :time-known bindings)))
     (subseq tf 0 (position #\space tf))))
 
-(defun write-letter! ()
+(defun write-letter! (&key id-or-name class)
+  (terpri) (terpri)
   (unless *default-bindings*
-    (get-vars))
+    (get-vars :id-or-name id :class class))
   (recursive-write-part *start-letter-token*))
 
 (defun charp (c)
@@ -119,6 +123,7 @@
     (:time-known-number ,#'time-known-number)
     ))
 
+#|
 (setq *default-bindings* 
   '((:to-person-salutation "Dr. Smith")
     (:student-full-name "Jane Doe")
@@ -130,5 +135,6 @@
     (:nice-phrase "is a quick study")
     (:neg-phrase "was often late to class")
     ))
+|#
 
-(write-letter!)
+(write-letter! :id-or-name 12345 :class "symsys245")
