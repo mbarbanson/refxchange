@@ -60,33 +60,40 @@
 
 (defun get-vars (&key id-or-name course)
   "Pull everything that we can from the student record, and ask for the rest."
-  (let ((student (find-student :id-or-name id-or-name)))
-    (setq *default-bindings* 
-	  (loop for (var prompt accessor) in *vars*
-		with result = nil
-		collect 
-		`(,var 
-		  ,(or (and accessor student (funcall accessor student))
-		       (progn (princ prompt) (read-line))))))))
+  ;; This is really ugly, using *default-bindings* both as a local looking down, and as a global looks up!
+  (setq *default-bindings* 
+	(let* ((student (find-student :id-or-name id-or-name))
+	       (*default-bindings* ;; computations can use these values!
+		(loop for (var prompt accessor) in *vars*
+		      with result = nil
+		      collect 
+		      `(,var 
+			,(or (and accessor student (funcall accessor student))
+			     (progn (princ prompt) (read-line)))))))
+	  (append *default-bindings*  
+		  (loop for (key fn) in *computed-var-vals* 
+			collect `(,key ,(funcall fn student)))
+		  ))))
 
 (defun vval (var &optional (bindings *default-bindings*))
   (or (cadr (assoc var bindings))
       (error "In VVAL, tried to lookup ~a, which isn't a valid var." var)))
 
-(defun short-name-or-pronoun (&optional (bindings *default-bindings*))
+;;; These computed var vals get given the student record, but can also
+;;; use the input values from the global *default-bindings*
+
+(defun short-name-or-pronoun (rec)
   (if (zerop (random 2))
-      (if (string-equal "m" (vval :gender bindings)) "he" "she")
+      (if (string-equal "m" (vval :gender *default-bindings*)) "he" "she")
       (student-short-name bindings)))
-
-(defun student-short-name (&optional (bindings *default-bindings*))
-  (let* ((fn (vval :student-full-name bindings)))
+(defun student-short-name (rec)
+  (let* ((fn (vval :student-full-name *default-bindings*)))
     (subseq fn 0 (position #\space fn))))
-
-(defun time-known-unit (&optional (bindings *default-bindings*))
-  (let* ((tf (vval :time-known bindings)))
+(defun time-known-unit (rec)
+  (let* ((tf (vval :time-known *default-bindings*)))
     (subseq tf (position #\space tf))))
-(defun time-known-number (&optional (bindings *default-bindings*))
-  (let* ((tf (vval :time-known bindings)))
+(defun time-known-number (rec)
+  (let* ((tf (vval :time-known *default-bindings*)))
     (subseq tf 0 (position #\space tf))))
 
 (defun write-letter! (&key id-or-name course)
@@ -118,6 +125,15 @@
 (defun lprint (string)
   (princ string))
 
+(defparameter *computed-var-vals* 
+  `((:short-name-or-pronoun ,#'short-name-or-pronoun)
+    (:student-short-name ,#'student-short-name)
+    (:time-known-unit ,#'time-known-unit)
+    (:time-known-number ,#'time-known-number)
+    (:my-course ,#'my-course)
+    (:grade-in-course ,#'course-grade)))
+
+
 (defparameter *grammar*
   `((:ref-letter :salutation :intro :known-time :course-details :way-known :comments)
     (:salutation "Dear " :to-person-salutation ", ")
@@ -128,11 +144,7 @@
     (:comments :pos :neg)
     (:pos "On the positive side " :short-name-or-pronoun " " :nice-phrase ", ")
     (:neg "on the otherhand " :short-name-or-pronoun " " :neg-phrase ". ")
-    (:short-name-or-pronoun ,#'short-name-or-pronoun)
-    (:student-short-name ,#'student-short-name)
-    (:time-known-unit ,#'time-known-unit)
-    (:time-known-number ,#'time-known-number)
-    (:course-details "In my course, " #,my-course ,#'short-name-or-pronoun " received a " ,#'grade-in-course)
+    (:course-details "In my course, " :my-course :short-name-or-pronoun " received a " :grade-in-course ". ")
     ))
 
 #|
@@ -150,7 +162,8 @@
 |#
 
 (format t "=== Writing for a known student, 12345 ===~%")
-(setq *student-recs* nil)
+(setq *student-recs* nil) (setq *default-bindings* nil)
 (write-letter! :id-or-name 12345 :course "symsys245")
 (format t "=== Writing for a UNknown student! ===~%")
+(setq *student-recs* nil) (setq *default-bindings* nil)
 (write-letter! :id-or-name 00000 :course "symsys245")
