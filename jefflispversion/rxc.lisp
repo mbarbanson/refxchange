@@ -4,26 +4,15 @@
 ;;; at the end. You need to either comment that out, or something, to
 ;;; stop it. 
 
+(defstruct student :id :full-name :brief-name :gpa :ecas :courses :gender)
+
 (defparameter *start-letter-token* :ref-letter)
 (defvar *my-course* nil)
 (defvar *my-name* nil)
 
 (defparameter *grammar* nil) ;; set later bcs of fwd refs for fns.
-
-(defun course-grade (rec)
-  (if rec
-      (cdr (assoc *my-course* (student-courses rec) :test #'string-equal))
-    (vval :course-grade)))
-
-(defstruct student :id :full-name :brief-name :gpa :ecas :courses :gender)
-
-(defparameter *course-cataglog* 
-  '(("symsys245" . "Interaction Analysis")
-    ("phys105" . "Quantum Physics of Cats")
-    ("CS106B" . "Why there is Air")))
-
 (defvar *vars* nil) ;; These will get loaded out of the grammar at init time, based on grammatical elements that have ? in the second position.
-
+(defvar *var-bindings* nil)
 (defvar *student-recs* nil)
 
 (defun load-student-recs ()
@@ -41,6 +30,16 @@
 				     :gender (getf rec :gender)
 				     )))))
 
+(defparameter *course-cataglog* 
+  '(("symsys245" . "Interaction Analysis")
+    ("phys105" . "Quantum Physics of Cats")
+    ("CS106B" . "Why there is Air")))
+
+(defun course-grade (rec)
+  (if rec
+      (cdr (assoc *my-course* (student-courses rec) :test #'string-equal))
+    (vval :course-grade)))
+
 (defun find-student (&key id-or-name)
   (unless *student-recs* (load-student-recs))
   (let ((rec (loop for rec in *student-recs*
@@ -52,8 +51,6 @@
       (format t "No record was found for ~a. You'll need to fill in the info...~%" id-or-name))
     rec))
 	
-(defvar *var-bindings* nil)
-
 (defun get-vars (&key id-or-name)
   "Rip the vars out of the grammar, and pull everything that we can from the student record, and ask for the rest."
   ;; First rip them out of the grammar and shove them into
