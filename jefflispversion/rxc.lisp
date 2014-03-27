@@ -9,6 +9,7 @@
 
 (defparameter *start-letter-token* :ref-letter)
 (defvar *my-course* nil)
+(defvar *my-name* nil)
 
 (defparameter *grammar* nil) ;; set later bcs of fwd refs for fns.
 
@@ -17,7 +18,9 @@
       (cdr (assoc *my-course* (student-courses rec) :test #'string-equal))
     (vval :course-grade)))
 
+;;; FFF These could be done away with by using symbol-function in vval.
 (defun my-course (rec) *my-course*)
+(defun my-name (rec) *my-name*)
 
 (defstruct student :id :full-name :brief-name :gpa :ecas :courses :gender)
 
@@ -105,9 +108,9 @@
   (let* ((tf (vval :time-known *var-bindings*)))
     (subseq tf 0 (position #\space tf))))
 
-(defun write-letter! (&key id-or-name course)
+(defun write-letter! (&key id-or-name course my-name)
   (terpri) (terpri)
-  (setq *my-course* course)
+  (setq *my-course* course *my-name* my-name)
   (get-vars :id-or-name id-or-name :course course) ;; Side effects *var-bindings*
   (recursive-write-part *start-letter-token*))
 
@@ -118,7 +121,8 @@
 ;;; Here's the core function:
 
 (defun recursive-write-part (token)
-  (cond	((functionp token) (lprint (funcall token)))
+  (cond	((eq '/ token) (princ #\newline) (princ #\newline))
+	((functionp token) (lprint (funcall token)))
 	((listp token)
 	 (cond ((eq :alt (car token))
 		(recursive-write-part
@@ -128,14 +132,19 @@
 	((keywordp token) 
 	 (if (assoc token *computed-vars*)
 	     (lprint (vval token))
-	   (let ((expr (assoc token *grammar*)))
+	   (let ((expr (assoc*? token *grammar*)))
 	     (if (eq '? (second expr)) ;; A var
 		 (if (vval token) 
 		     (lprint (vval token))
 		   (error "In recursive-write-part, shouldn't get here. Token= ~s" token))
-	       (mapcar #'recursive-write-part (cdr (assoc token *grammar*)))))))
+	       (mapcar #'recursive-write-part (cdr (assoc*? token *grammar*)))))))
 	 (t (error "In recursive-write-part, shouldn't get here. Token= ~s" token))
 	))
+
+(defun assoc*? (token grammar)
+  "If there's just one entry, this is just like assoc, but if there's more than one hit, this picks on at random from the various alternatives."
+  (let ((set (loop for expr in grammar when (eq token (car expr)) collect expr)))
+    (nth (random (length set)) set)))
 
 (defun lprint (string)
   (princ string))
@@ -149,21 +158,34 @@
     (:time-known-unit ,#'time-known-unit)
     (:time-known-number ,#'time-known-number)
     (:my-course ,#'my-course)
+    (:my-name ,#'my-name)
     (:course-grade ,#'course-grade)
     (:course-full-name ,#'course-full-name)
     ))
 
+;;; There are two ways to do alternation. Local alternations is done
+;;; by just (:alt "a" "b") in the elt, but you can also give multiple
+;;; variations with the same head, see for example :neg
+
 (defparameter *grammar*
-  `((:ref-letter :salutation :intro :known-time :way-known :course-details :comments)
-    (:salutation "Dear " :to-person-salutation ", ")
+  `((:ref-letter :salutation / :intro :known-time :way-known :course-details / :comments / :close / :sig)
+    (:salutation "Dear " :to-person-salutation ", " )
     (:intro "It is my " :pleasure/honor " to write in support of " :student-full-name "'s application to the " :program ". ")
     (:known-time "I have known " :student-short-name " for " :time-known-number :time-known-unit ". ")
     (:way-known :short-name-or-pronoun " attended my course \'" :course-full-name "\' (aka, "  :my-course "). ")
     (:pleasure/honor (:alt "pleasure" "honor"))
-    (:comments :pos :neg)
+    (:comments :pos :neg+)
     (:pos "On the positive side " :short-name-or-pronoun " " :nice-phrase ", ")
+    (:pos "On the one hand " :short-name-or-pronoun " " :nice-phrase ", ")
+    (:neg+ :neg :not-bad)
+    (:not-bad "But this is not a very serious shortcoming. ")
+    (:not-bad "However, this never became a serious pproblem, and I don't expect that it will. ")
     (:neg "on the otherhand " :short-name-or-pronoun " " :neg-phrase ". ")
+    (:neg "Although, " :short-name-or-pronoun " " :neg-phrase ". ")
+    (:neg "However, " :short-name-or-pronoun " " :neg-phrase ". ")
     (:course-details "In " :my-course " " :short-name-or-pronoun " received a " :course-grade ". ")
+    (:close "In sum, I can without hesitation support " :student-full-name " for " :program ". ")
+    (:sig / / :my-name)
     ;; Vars are indicated by a ? in second position. These are ripped out and put into *vars* at init. 
     ;; Optional fn in third pos must take only a student record.
     ;; These can actually go anywhere. I just cluster them here for convenience.
@@ -181,8 +203,8 @@
 
 (format t "~%~%=== Writing for a known student, 12345 ===~%~%")
 (setq *student-recs* nil) (setq *var-bindings* nil)
-(write-letter! :id-or-name 12345 :course "symsys245")
+(write-letter! :id-or-name 12345 :course "symsys245" :my-name "Jeff Shrager")
 (format t "~%~%=== Writing for a UNknown student! ===~%~%")
 (setq *student-recs* nil) (setq *var-bindings* nil)
-(write-letter! :id-or-name 00000 :course "symsys245")
+(write-letter! :id-or-name 00000 :course "symsys245" :my-name "Jeff Shrager")
 (format t "~%~%=== DONE ===~%~%")
