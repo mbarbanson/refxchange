@@ -4,9 +4,6 @@
 ;;; at the end. You need to either comment that out, or something, to
 ;;; stop it. 
 
-;;; If you want to reset the vars just (setq *var-bindings* nil)
-;;; before (write-letter!), and it will re-ask.
-
 (defparameter *start-letter-token* :ref-letter)
 (defvar *my-course* nil)
 (defvar *my-name* nil)
@@ -17,10 +14,6 @@
   (if rec
       (cdr (assoc *my-course* (student-courses rec) :test #'string-equal))
     (vval :course-grade)))
-
-;;; FFF These could be done away with by using symbol-function in vval.
-(defun my-course (rec) *my-course*)
-(defun my-name (rec) *my-name*)
 
 (defstruct student :id :full-name :brief-name :gpa :ecas :courses :gender)
 
@@ -61,7 +54,7 @@
 	
 (defvar *var-bindings* nil)
 
-(defun get-vars (&key id-or-name course)
+(defun get-vars (&key id-or-name)
   "Rip the vars out of the grammar, and pull everything that we can from the student record, and ask for the rest."
   ;; First rip them out of the grammar and shove them into
   ;; *vars*. This is just a convenience, these actually could be left
@@ -79,7 +72,8 @@
 		      with result = nil
 		      collect 
 		      `(,var 
-			,(or (and accessor student (funcall accessor student))
+			,(or (and accessor (functionp accessor) student (funcall accessor student))
+			     (and accessor (symbolp accessor) student (symbol-value accessor))
 			     (progn (princ prompt) (read-line)))))))
 	  (append *var-bindings*
 		  (loop for (key fn) in *computed-vars* 
@@ -108,10 +102,9 @@
   (let* ((tf (vval :time-known *var-bindings*)))
     (subseq tf 0 (position #\space tf))))
 
-(defun write-letter! (&key id-or-name course my-name)
+(defun write-letter! (id-or-name *my-course* *my-name*)
   (terpri) (terpri)
-  (setq *my-course* course *my-name* my-name)
-  (get-vars :id-or-name id-or-name :course course) ;; Side effects *var-bindings*
+  (get-vars :id-or-name id-or-name) ;; Side effects *var-bindings*
   (recursive-write-part *start-letter-token*))
 
 (defun charp (c)
@@ -122,6 +115,7 @@
 
 (defun recursive-write-part (token)
   (cond	((eq '/ token) (princ #\newline) (princ #\newline))
+	((and (symbolp token) (not (keywordp token)) (symbol-value token)) (princ (symbol-value token)))
 	((functionp token) (lprint (funcall token)))
 	((listp token)
 	 (cond ((eq :alt (car token))
@@ -157,22 +151,21 @@
     (:student-short-name ,#'student-short-name)
     (:time-known-unit ,#'time-known-unit)
     (:time-known-number ,#'time-known-number)
-    (:my-course ,#'my-course)
-    (:my-name ,#'my-name)
     (:course-grade ,#'course-grade)
     (:course-full-name ,#'course-full-name)
     ))
 
 ;;; There are two ways to do alternation. Local alternations is done
 ;;; by just (:alt "a" "b") in the elt, but you can also give multiple
-;;; variations with the same head, see for example :neg
+;;; variations with the same head, see for example :neg. A / creates a
+;;; paragraph break.
 
 (defparameter *grammar*
   `((:ref-letter :salutation / :intro :known-time :way-known :course-details / :comments / :close / :sig)
     (:salutation "Dear " :to-person-salutation ", " )
     (:intro "It is my " :pleasure/honor " to write in support of " :student-full-name "'s application to the " :program ". ")
     (:known-time "I have known " :student-short-name " for " :time-known-number :time-known-unit ". ")
-    (:way-known :short-name-or-pronoun " attended my course \'" :course-full-name "\' (aka, "  :my-course "). ")
+    (:way-known :short-name-or-pronoun " attended my course \'" :course-full-name "\' (aka, "  *my-course* "). ")
     (:pleasure/honor (:alt "pleasure" "honor"))
     (:comments :pos :neg+)
     (:pos "On the positive side " :short-name-or-pronoun " " :nice-phrase ", ")
@@ -183,9 +176,9 @@
     (:neg "on the otherhand " :short-name-or-pronoun " " :neg-phrase ". ")
     (:neg "Although, " :short-name-or-pronoun " " :neg-phrase ". ")
     (:neg "However, " :short-name-or-pronoun " " :neg-phrase ". ")
-    (:course-details "In " :my-course " " :short-name-or-pronoun " received a " :course-grade ". ")
+    (:course-details "In " *my-course* " " :short-name-or-pronoun " received a " :course-grade ". ")
     (:close "In sum, I can without hesitation support " :student-full-name " for " :program ". ")
-    (:sig / / :my-name)
+    (:sig *my-name*)
     ;; Vars are indicated by a ? in second position. These are ripped out and put into *vars* at init. 
     ;; Optional fn in third pos must take only a student record.
     ;; These can actually go anywhere. I just cluster them here for convenience.
@@ -194,7 +187,7 @@
     (:time-known ? "How long have you known this student, for example '3 months'? ")
     (:program ? "What is the name of the program to which the student is applying? ")
     (:gender ? "Gender (m/f): " ,#'student-gender)
-    (:course-attended-title ? "The name of the course that the student took from you? " ,#'my-course)
+    (:course-attended-title ? "The name of the course that the student took from you? " *my-course*)
     (:course-grade ? "The grade that this student received in your course (e.g., A-): " ,#'course-grade)
     (:student-in-top-% ? "What percentile was this student (for example, a student in the top 5% you would say: '5')? ")
     (:nice-phrase ? "Say something positive about this student (e.g., 'is a quick study')")
@@ -203,8 +196,8 @@
 
 (format t "~%~%=== Writing for a known student, 12345 ===~%~%")
 (setq *student-recs* nil) (setq *var-bindings* nil)
-(write-letter! :id-or-name 12345 :course "symsys245" :my-name "Jeff Shrager")
+(write-letter! 12345 "symsys245" "Jeff Shrager")
 (format t "~%~%=== Writing for a UNknown student! ===~%~%")
 (setq *student-recs* nil) (setq *var-bindings* nil)
-(write-letter! :id-or-name 00000 :course "symsys245" :my-name "Jeff Shrager")
+(write-letter! 00000 "symsys245" "Jeff Shrager")
 (format t "~%~%=== DONE ===~%~%")
