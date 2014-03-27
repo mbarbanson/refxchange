@@ -4,7 +4,7 @@
 ;;; at the end. You need to either comment that out, or something, to
 ;;; stop it. 
 
-;;; If you want to reset the vars just (setq *default-bindings* nil)
+;;; If you want to reset the vars just (setq *var-bindings* nil)
 ;;; before (write-letter!), and it will re-ask.
 
 (defparameter *start-letter-token* :ref-letter)
@@ -26,18 +26,7 @@
     ("phys105" . "Quantum Physics of Cats")
     ("CS106B" . "Why there is Air")))
 
-(defparameter *vars*  ;; The fns in third pos must take only a student record
-  `((:to-person-salutation "How should the salutation read, for example: 'Dr. Smith'? ")
-    (:student-full-name "What is the student's full name, as 'Jane Doe'? " ,#'student-full-name)
-    (:time-known "How long have you known this student, for example '3 months'? ")
-    (:program "What is the name of the program to which the student is applying? ")
-    (:gender "Gender (m/f): " ,#'student-gender)
-    (:course-attended-title "The name of the course that the student took from you? " ,#'my-course)
-    (:course-grade "The grade that this student received in your course (e.g., A-): " ,#'course-grade)
-    (:student-in-top-% "What percentile was this student (for example, a student in the top 5% you would say: '5')? ")
-    (:nice-phrase "Say something positive about this student (e.g., 'is a quick study')")
-    (:neg-phrase "Say something slightly negative about this student (e.g., 'was often late to course')")
-    ))
+(defvar *vars* nil) ;; These will get loaded out of the grammar at init time, based on grammatical elements that have ? in the second position.
 
 (defvar *student-recs* nil)
 
@@ -67,55 +56,66 @@
       (format t "No record was found for ~a. You'll need to fill in the info...~%" id-or-name))
     rec))
 	
-(defvar *default-bindings* nil)
+(defvar *var-bindings* nil)
 
 (defun get-vars (&key id-or-name course)
-  "Pull everything that we can from the student record, and ask for the rest."
-  ;; This is really ugly, using *default-bindings* both as a local looking down, and as a global looks up!
-  (setq *default-bindings* 
+  "Rip the vars out of the grammar, and pull everything that we can from the student record, and ask for the rest."
+  ;; First rip them out of the grammar and shove them into
+  ;; *vars*. This is just a convenience, these actually could be left
+  ;; in place.
+  (setq *vars* 
+	(loop for expr in *grammar*
+	      if (eq '? (second expr))
+	      collect expr))
+  ;; This is really ugly, using *var-bindings* both as a local
+  ;; looking down, and as a global looks up!
+  (setq *var-bindings* 
 	(let* ((student (find-student :id-or-name id-or-name))
-	       (*default-bindings* ;; computations can use these values!
-		(loop for (var prompt accessor) in *vars*
+	       (*var-bindings* ;; computations can use these values!
+		(loop for (var nil prompt accessor) in *vars* ;; second is always ? for vars
 		      with result = nil
 		      collect 
 		      `(,var 
 			,(or (and accessor student (funcall accessor student))
 			     (progn (princ prompt) (read-line)))))))
-	  (append *default-bindings*  
-		  (loop for (key fn) in *computed-var-vals* 
+	  (append *var-bindings*
+		  (loop for (key fn) in *computed-vars* 
 			collect `(,key ,(funcall fn student)))
-		  ))))
+		  )))
+  )
 
-(defun vval (var &optional (bindings *default-bindings*))
+(defun vval (var &optional (bindings *var-bindings*))
   (or (cadr (assoc var bindings))
       (error "In VVAL, tried to lookup ~a, which isn't a valid var." var)))
 
 ;;; These computed var vals get given the student record, but can also
-;;; use the input values from the global *default-bindings*
+;;; use the input values from the global *var-bindings*
 
 (defun short-name-or-pronoun (rec)
   (if (zerop (random 2))
-      (if (string-equal "m" (vval :gender *default-bindings*)) "he" "she")
-      (student-short-name  *default-bindings*)))
+      (if (string-equal "m" (vval :gender *var-bindings*)) "he" "she")
+      (student-short-name  *var-bindings*)))
 (defun student-short-name (rec)
-  (let* ((fn (vval :student-full-name *default-bindings*)))
+  (let* ((fn (vval :student-full-name *var-bindings*)))
     (subseq fn 0 (position #\space fn))))
 (defun time-known-unit (rec)
-  (let* ((tf (vval :time-known *default-bindings*)))
+  (let* ((tf (vval :time-known *var-bindings*)))
     (subseq tf (position #\space tf))))
 (defun time-known-number (rec)
-  (let* ((tf (vval :time-known *default-bindings*)))
+  (let* ((tf (vval :time-known *var-bindings*)))
     (subseq tf 0 (position #\space tf))))
 
 (defun write-letter! (&key id-or-name course)
   (terpri) (terpri)
   (setq *my-course* course)
-  (setq *default-bindings* (get-vars :id-or-name id-or-name :course course))
+  (get-vars :id-or-name id-or-name :course course) ;; Side effects *var-bindings*
   (recursive-write-part *start-letter-token*))
 
 (defun charp (c)
   (member (type-of c) 
 	  '(STANDARD-CHAR CHARACTER)))
+
+;;; Here's the core function:
 
 (defun recursive-write-part (token)
   (cond	((functionp token) (lprint (funcall token)))
@@ -126,11 +126,15 @@
 	       (t (mapcar #'recursive-write-part token))))
 	((or (charp token) (stringp token)) (lprint token))
 	((keywordp token) 
-	 (cond ((assoc token *grammar*)
-		(mapcar #'recursive-write-part (cdr (assoc token *grammar*))))
-	       ((vval token) (lprint (vval token)))
-	       (t (error "In recursive-write-part, shouldn't get here. Token= ~s" token))))
-	(t (error "In recursive-write-part, shouldn't get here. Token= ~s" token))
+	 (if (assoc token *computed-vars*)
+	     (lprint (vval token))
+	   (let ((expr (assoc token *grammar*)))
+	     (if (eq '? (second expr)) ;; A var
+		 (if (vval token) 
+		     (lprint (vval token))
+		   (error "In recursive-write-part, shouldn't get here. Token= ~s" token))
+	       (mapcar #'recursive-write-part (cdr (assoc token *grammar*)))))))
+	 (t (error "In recursive-write-part, shouldn't get here. Token= ~s" token))
 	))
 
 (defun lprint (string)
@@ -139,7 +143,7 @@
 (defun course-full-name (rec)
   (cdr (assoc *my-course* *course-cataglog* :test #'string-equal)))
 
-(defparameter *computed-var-vals* 
+(defparameter *computed-vars* 
   `((:short-name-or-pronoun ,#'short-name-or-pronoun)
     (:student-short-name ,#'student-short-name)
     (:time-known-unit ,#'time-known-unit)
@@ -148,7 +152,6 @@
     (:course-grade ,#'course-grade)
     (:course-full-name ,#'course-full-name)
     ))
-
 
 (defparameter *grammar*
   `((:ref-letter :salutation :intro :known-time :way-known :course-details :comments)
@@ -161,12 +164,25 @@
     (:pos "On the positive side " :short-name-or-pronoun " " :nice-phrase ", ")
     (:neg "on the otherhand " :short-name-or-pronoun " " :neg-phrase ". ")
     (:course-details "In " :my-course " " :short-name-or-pronoun " received a " :course-grade ". ")
+    ;; Vars are indicated by a ? in second position. These are ripped out and put into *vars* at init. 
+    ;; Optional fn in third pos must take only a student record.
+    ;; These can actually go anywhere. I just cluster them here for convenience.
+    (:to-person-salutation ? "How should the salutation read, for example: 'Dr. Smith'? ")
+    (:student-full-name ? "What is the student's full name, as 'Jane Doe'? " ,#'student-full-name)
+    (:time-known ? "How long have you known this student, for example '3 months'? ")
+    (:program ? "What is the name of the program to which the student is applying? ")
+    (:gender ? "Gender (m/f): " ,#'student-gender)
+    (:course-attended-title ? "The name of the course that the student took from you? " ,#'my-course)
+    (:course-grade ? "The grade that this student received in your course (e.g., A-): " ,#'course-grade)
+    (:student-in-top-% ? "What percentile was this student (for example, a student in the top 5% you would say: '5')? ")
+    (:nice-phrase ? "Say something positive about this student (e.g., 'is a quick study')")
+    (:neg-phrase ? "Say something slightly negative about this student (e.g., 'was often late to course')")
     ))
 
 (format t "~%~%=== Writing for a known student, 12345 ===~%~%")
-(setq *student-recs* nil) (setq *default-bindings* nil)
+(setq *student-recs* nil) (setq *var-bindings* nil)
 (write-letter! :id-or-name 12345 :course "symsys245")
 (format t "~%~%=== Writing for a UNknown student! ===~%~%")
-(setq *student-recs* nil) (setq *default-bindings* nil)
+(setq *student-recs* nil) (setq *var-bindings* nil)
 (write-letter! :id-or-name 00000 :course "symsys245")
 (format t "~%~%=== DONE ===~%~%")
